@@ -3000,6 +3000,13 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
             SeenLocal(addrMe);
         }
 
+        // Version number wasn't increased for some reason, so we ban the old clients this way.
+        if (strncasecmp("/AsiaCoin:0.7.", pfrom->strSubVer.c_str(), 14) == 0) {        	
+            printf("partner %s using obsolete version %s; disconnecting\n", pfrom->addr.ToString().c_str(), pfrom->strSubVer.c_str());
+            pfrom->fDisconnect = true;
+            return false;
+        }
+
         // Disconnect if we connected to ourself
         if (nNonce == nLocalHostNonce && nNonce > 1)
         {
