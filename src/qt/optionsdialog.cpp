@@ -244,7 +244,7 @@ void OptionsDialog::showRestartWarning_Tor()
 {
     if(!fRestartWarningDisplayed_Proxy)
     {
-        QMessageBox::warning(this, tr("Warning"), tr("This setting will take effect after restarting NovaCoin."), QMessageBox::Ok);
+        QMessageBox::warning(this, tr("Warning"), tr("This setting will take effect after restarting AsiaCoin."), QMessageBox::Ok);
         fRestartWarningDisplayed_Tor = true;
     }
 }
