@@ -25,6 +25,11 @@ public:
         ProxyIP,           // QString
         ProxyPort,         // int
         ProxySocksVersion, // int
+        TorUse,            // bool
+        TorIP,             // QString
+        TorPort,           // int
+        TorOnly,           // bool
+        TorName,           // QString
         Fee,               // qint64
         DisplayUnit,       // BitcoinUnits::Unit
         DisplayAddresses,  // bool

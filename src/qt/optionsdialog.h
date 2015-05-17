@@ -40,21 +40,26 @@ private slots:
     void on_cancelButton_clicked();
     void on_applyButton_clicked();
 
+    void showRestartWarning_Tor();
     void showRestartWarning_Proxy();
     void showRestartWarning_Lang();
     void updateDisplayUnit();
     void handleProxyIpValid(QValidatedLineEdit *object, bool fState);
+    void handleTorIpValid(QValidatedLineEdit *object, bool fState);
 
 signals:
     void proxyIpValid(QValidatedLineEdit *object, bool fValid);
+    void torIpValid(QValidatedLineEdit *object, bool fValid);
 
 private:
     Ui::OptionsDialog *ui;
     OptionsModel *model;
     MonitoredDataMapper *mapper;
+    bool fRestartWarningDisplayed_Tor;
     bool fRestartWarningDisplayed_Proxy;
     bool fRestartWarningDisplayed_Lang;
     bool fProxyIpValid;
+    bool fTorIpValid;
 };
 
 #endif // OPTIONSDIALOG_H
