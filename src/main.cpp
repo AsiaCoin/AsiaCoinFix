@@ -1517,7 +1517,7 @@ bool CBlock::DisconnectBlock(CTxDB& txdb, CBlockIndex* pindex)
 bool CBlock::ConnectBlock(CTxDB& txdb, CBlockIndex* pindex, bool fJustCheck)
 {
     // Check it again in case a previous version let a bad block in
-    if (!CheckBlock(!fJustCheck, !fJustCheck))
+    if (!CheckBlock(!fJustCheck, !fJustCheck, false))
         return false;
 
     // Do not allow blocks that contain transactions which 'overwrite' older transactions,
@@ -2037,7 +2037,7 @@ bool CBlock::AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos)
 }
 
 
-bool CBlock::CheckBlock(bool fCheckPOW, bool fCheckMerkleRoot) const
+bool CBlock::CheckBlock(bool fCheckPOW, bool fCheckMerkleRoot, bool fCheckSig) const
 {
     // These are checks that are independent of context
     // that can be verified before saving an orphan block.
@@ -2112,7 +2112,7 @@ bool CBlock::CheckBlock(bool fCheckPOW, bool fCheckMerkleRoot) const
         return DoS(100, error("CheckBlock() : hashMerkleRoot mismatch"));
 
     // ppcoin: check block signature
-    if (!CheckBlockSignature())
+    if (fCheckSig && !CheckBlockSignature())
         return DoS(100, error("CheckBlock() : bad block signature"));
 
     return true;
