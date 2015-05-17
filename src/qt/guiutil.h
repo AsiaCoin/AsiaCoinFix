@@ -4,6 +4,10 @@
 #include <QString>
 #include <QObject>
 #include <QMessageBox>
+#include <QWidget>
+#include <QEvent>
+#include <QTextEdit>
+#include <QAbstractItemView>
 
 #include <boost/filesystem.hpp>
 
