@@ -17,13 +17,16 @@ bool static ApplyProxySettings()
     QSettings settings;
     CService addrProxy(settings.value("addrProxy", "127.0.0.1:9050").toString().toStdString());
     int nSocksVersion(settings.value("nSocksVersion", 5).toInt());
+
     if (!settings.value("fUseProxy", false).toBool()) {
         addrProxy = CService();
         nSocksVersion = 0;
         return false;
     }
+
     if (nSocksVersion && !addrProxy.IsValid())
         return false;
+
     if (!IsLimited(NET_IPV4))
         SetProxy(NET_IPV4, addrProxy, nSocksVersion);
     if (nSocksVersion > 4) {
@@ -31,8 +34,27 @@ bool static ApplyProxySettings()
         if (!IsLimited(NET_IPV6))
             SetProxy(NET_IPV6, addrProxy, nSocksVersion);
 #endif
-        SetNameProxy(addrProxy, nSocksVersion);
     }
+
+    SetNameProxy(addrProxy, nSocksVersion);
+
+    return true;
+}
+
+bool static ApplyTorSettings()
+{
+    QSettings settings;
+    CService addrTor(settings.value("addrTor", "127.0.0.1:9050").toString().toStdString());
+    if (!settings.value("fUseTor", false).toBool()) {
+        addrTor = CService();
+        return false;
+    }
+    if (!addrTor.IsValid())
+        return false;
+
+    SetProxy(NET_TOR, addrTor, 5);
+    SetReachable(NET_TOR);
+
     return true;
 }
 
@@ -53,10 +75,28 @@ void OptionsModel::Init()
     // command-line options to override the GUI settings:
     if (settings.contains("fUseUPnP"))
         SoftSetBoolArg("-upnp", settings.value("fUseUPnP").toBool());
-    if (settings.contains("addrProxy") && settings.value("fUseProxy").toBool())
-        SoftSetArg("-proxy", settings.value("addrProxy").toString().toStdString());
-    if (settings.contains("nSocksVersion") && settings.value("fUseProxy").toBool())
-        SoftSetArg("-socks", settings.value("nSocksVersion").toString().toStdString());
+
+    if ( !(settings.value("fTorOnly").toBool() && settings.contains("addrTor")) ) {
+        if (settings.contains("addrProxy") && settings.value("fUseProxy").toBool())
+            SoftSetArg("-proxy", settings.value("addrProxy").toString().toStdString());
+        if (settings.contains("nSocksVersion") && settings.value("fUseProxy").toBool())
+            SoftSetArg("-socks", settings.value("nSocksVersion").toString().toStdString());
+    }
+
+    if (settings.contains("addrTor") && settings.value("fUseTor").toBool()) {
+        SoftSetArg("-tor", settings.value("addrTor").toString().toStdString());
+        if (settings.value("fTorOnly").toBool())
+            SoftSetArg("-onlynet", "tor");
+
+        if (settings.value("TorName").toString().length() == 22) {
+            std::string strTorName = settings.value("TorName").toString().toStdString();
+
+            CService addrTorName(strTorName, GetListenPort());
+            if (addrTorName.IsValid())
+                SoftSetArg("-torname", strTorName);
+        }
+    }
+
     if (settings.contains("detachDB"))
         SoftSetBoolArg("-detachdb", settings.value("detachDB").toBool());
     if (!language.isEmpty())
@@ -87,7 +127,7 @@ bool OptionsModel::Upgrade()
         }
     }
     QList<QString> boolOptions;
-    boolOptions << "bDisplayAddresses" << "fMinimizeToTray" << "fMinimizeOnClose" << "fUseProxy" << "fUseUPnP";
+    boolOptions << "bDisplayAddresses" << "fMinimizeToTray" << "fMinimizeOnClose" << "fUseProxy" << "fUseTor" << "fTorOnly" << "fUseUPnP";
     foreach(QString key, boolOptions)
     {
         bool value = false;
@@ -99,24 +139,38 @@ bool OptionsModel::Upgrade()
     }
     try
     {
-        CAddress addrProxyAddress;
+        CAddress addrProxyAddress, addrTorAddress;
         if (walletdb.ReadSetting("addrProxy", addrProxyAddress))
         {
             settings.setValue("addrProxy", addrProxyAddress.ToStringIPPort().c_str());
             walletdb.EraseSetting("addrProxy");
         }
+
+        if (walletdb.ReadSetting("addrTor", addrTorAddress))
+        {
+            settings.setValue("addrTor", addrTorAddress.ToStringIPPort().c_str());
+            walletdb.EraseSetting("addrTor");
+        }
     }
     catch (std::ios_base::failure &e)
     {
         // 0.6.0rc1 saved this as a CService, which causes failure when parsing as a CAddress
-        CService addrProxy;
+        CService addrProxy, addrTor;
         if (walletdb.ReadSetting("addrProxy", addrProxy))
         {
             settings.setValue("addrProxy", addrProxy.ToStringIPPort().c_str());
             walletdb.EraseSetting("addrProxy");
         }
+
+        if (walletdb.ReadSetting("addrTor", addrTor))
+        {
+            settings.setValue("addrTor", addrTor.ToStringIPPort().c_str());
+            walletdb.EraseSetting("addrTor");
+        }
     }
+
     ApplyProxySettings();
+    ApplyTorSettings();
     Init();
 
     return true;
@@ -161,6 +215,26 @@ QVariant OptionsModel::data(const QModelIndex & index, int role) const
         }
         case ProxySocksVersion:
             return settings.value("nSocksVersion", 5);
+        case TorUse:
+            return settings.value("fUseTor", false);
+        case TorIP: {
+            proxyType proxy;
+            if (GetProxy(NET_TOR, proxy))
+                return QVariant(QString::fromStdString(proxy.first.ToStringIP()));
+            else
+                return QVariant(QString::fromStdString("127.0.0.1"));
+        }
+        case TorPort: {
+            proxyType proxy;
+            if (GetProxy(NET_TOR, proxy))
+                return QVariant(proxy.first.GetPort());
+            else
+                return QVariant(9050);
+        }
+        case TorOnly:
+            return settings.value("fTorOnly", false);
+        case TorName:
+            return settings.value("TorName", "");
         case Fee:
             return QVariant(nTransactionFee);
         case DisplayUnit:
@@ -237,6 +311,41 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
             proxy.second = value.toInt();
             settings.setValue("nSocksVersion", proxy.second);
             successful = ApplyProxySettings();
+        }
+        break;
+        case TorUse: {
+            settings.setValue("fUseTor", value.toBool());
+            ApplyTorSettings();
+        }
+        break;
+        case TorIP: {
+            proxyType proxy;
+            proxy.first = CService("127.0.0.1", 9050);
+            GetProxy(NET_TOR, proxy);
+
+            CNetAddr addr(value.toString().toStdString());
+            proxy.first.SetIP(addr);
+            settings.setValue("addrTor", proxy.first.ToStringIPPort().c_str());
+            successful = ApplyTorSettings();
+        }
+        break;
+        case TorPort: {
+            proxyType proxy;
+            proxy.first = CService("127.0.0.1", 9050);
+            GetProxy(NET_TOR, proxy);
+
+            proxy.first.SetPort(value.toInt());
+            settings.setValue("addrTor", proxy.first.ToStringIPPort().c_str());
+            successful = ApplyTorSettings();
+        }
+        break;
+        case TorOnly: {
+            settings.setValue("fTorOnly", value.toBool());
+            ApplyTorSettings();
+        }
+        break;
+        case TorName: {
+            settings.setValue("TorName", value.toString());
         }
         break;
         case Fee:

@@ -229,7 +229,8 @@ std::string HelpMessage()
         "  -timeout=<n>           " + _("Specify connection timeout in milliseconds (default: 5000)") + "\n" +
         "  -proxy=<ip:port>       " + _("Connect through socks proxy") + "\n" +
         "  -socks=<n>             " + _("Select the version of socks proxy to use (4-5, default: 5)") + "\n" +
-        "  -tor=<ip:port>         " + _("Use proxy to reach tor hidden services (default: same as -proxy)") + "\n"
+        "  -tor=<ip:port>         " + _("Use proxy to reach tor hidden services (default: same as -proxy)") + "\n" +
+        "  -torname=<host.onion>  " + _("Send the specified hidden service name when connecting to Tor nodes (default: none)") + "\n" +
         "  -dns                   " + _("Allow DNS lookups for -addnode, -seednode and -connect") + "\n" +
         "  -port=<port>           " + _("Listen for connections on <port> (default: 35656 or testnet: 25656)") + "\n" +
         "  -maxconnections=<n>    " + _("Maintain at most <n> connections to peers (default: 125)") + "\n" +
@@ -278,7 +279,7 @@ std::string HelpMessage()
         "  -rpcallowip=<ip>       " + _("Allow JSON-RPC connections from specified IP address") + "\n" +
         "  -rpcconnect=<ip>       " + _("Send commands to node running on <ip> (default: 127.0.0.1)") + "\n" +
         "  -blocknotify=<cmd>     " + _("Execute command when the best block changes (%s in cmd is replaced by block hash)") + "\n" +
-		"  -walletnotify=<cmd>    " + _("Execute command when a wallet transaction changes (%s in cmd is replaced by TxID)") + "\n" +
+        "  -walletnotify=<cmd>    " + _("Execute command when a wallet transaction changes (%s in cmd is replaced by TxID)") + "\n" +
         "  -upgradewallet         " + _("Upgrade wallet to latest format") + "\n" +
         "  -keypool=<n>           " + _("Set key pool size to <n> (default: 100)") + "\n" +
         "  -rescan                " + _("Rescan the block chain for missing wallet transactions") + "\n" +
@@ -586,12 +587,21 @@ bool AppInit2()
     }
 
     // see Step 2: parameter interactions for more information about these
-    fNoListen = !GetBoolArg("-listen", true);
-    fDiscover = GetBoolArg("-discover", true);
-    fNameLookup = GetBoolArg("-dns", true);
+    if (!IsLimited(NET_IPV4) || !IsLimited(NET_IPV6))
+    {
+        fNoListen = !GetBoolArg("-listen", true);
+        fDiscover = GetBoolArg("-discover", true);
+        fNameLookup = GetBoolArg("-dns", true);
 #ifdef USE_UPNP
-    fUseUPnP = GetBoolArg("-upnp", USE_UPNP);
+        fUseUPnP = GetBoolArg("-upnp", USE_UPNP);
 #endif
+    } else {
+         // Don't listen, discover addresses or search for nodes if IPv4 and IPv6 networking is disabled.
+         fNoListen = true;
+         fDiscover = fNameLookup = fUseUPnP = false;
+         SoftSetBoolArg("-irc", false);
+         SoftSetBoolArg("-dnsseed", false);
+    }
 
     bool fBound = false;
     if (!fNoListen)
@@ -617,6 +627,22 @@ bool AppInit2()
         if (!fBound)
             return InitError(_("Failed to listen on any port. Use -listen=0 if you want this."));
     }
+
+    // If Tor is reachable then listen on loopback interface,
+    //    to allow allow other users reach you through the hidden service
+    if (!IsLimited(NET_TOR) && mapArgs.count("-torname")) {
+        std::string strError;
+        struct in_addr inaddr_loopback;
+        inaddr_loopback.s_addr = htonl(INADDR_LOOPBACK);
+
+#ifdef USE_IPV6
+        if (!BindListenPort(CService(in6addr_loopback, GetListenPort()), strError))
+            return InitError(strError);
+#endif
+        if (!BindListenPort(CService(inaddr_loopback, GetListenPort()), strError))
+            return InitError(strError);
+    }
+
 
     if (mapArgs.count("-externalip"))
     {
