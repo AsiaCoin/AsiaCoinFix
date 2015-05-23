@@ -26,6 +26,6 @@ At the moment of writing, Asiacoin software is a fork of https://github.com/micr
 
 This Micryon source is based on Novacoin as https://github.com/micryon/asiacoin-bc/commit/4a9f028e561db9144046f8a0726fb24d015186a5#diff-e17a534f3f61cc07040bfcf8255237daL55
 
-At the moment of writing, trusted Novacoin developer fsb4000 agreed to continue micryon work on https://github.com/fsb4000/AsiaCoinFix
+At the moment of writing, trusted Novacoin developer fsb4000 agreed to continue Micryon work on https://github.com/fsb4000/AsiaCoinFix
 
 fsb4000 is also trusted as a core Bitcoin developer : https://bitcoin.org/en/release/v0.10.1
