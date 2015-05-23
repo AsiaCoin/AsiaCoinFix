@@ -28,4 +28,4 @@ This Micryon source is based on Novacoin as https://github.com/micryon/asiacoin-
 
 At the moment of writing, trusted Novacoin developer fsb4000 agreed to continue micryon work on https://github.com/fsb4000/AsiaCoinFix
 
-By the way, fsb4000 is also trusted as a core Bitcoin developer : https://bitcoin.org/en/release/v0.10.1
+fsb4000 is also trusted as a core Bitcoin developer : https://bitcoin.org/en/release/v0.10.1
