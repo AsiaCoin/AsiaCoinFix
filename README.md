@@ -31,5 +31,7 @@ At the moment of writing, trusted Novacoin developer fsb4000 agreed to continue 
 fsb4000 is also trusted as a core Bitcoin developer : https://bitcoin.org/en/release/v0.10.1
 
 important latest developments as for May, 24 2015 :
+
 -adding multisig
+
 -adding Tor menu
