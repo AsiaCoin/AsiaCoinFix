@@ -1,6 +1,6 @@
 What is Asiacoin?
 
-Asiacoin is an experimental new digital currency that enables instant payments to anyone, anywhere in the world. 
+Asiacoin is an experimental new digital currency that enables anonymous, instant payments to anyone, anywhere in the world. 
 
 At the moment of writing, Asiacoin transaction is done and confirmed in around 20 seconds which is much faster than Bitcoin transaction confirmed in around 40 minutes
 
