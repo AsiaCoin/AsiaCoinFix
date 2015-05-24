@@ -16,7 +16,7 @@ For more information, as well as an immediately useable, binary version of the A
 
 License
 
-Asiacoin is released under the terms of the MIT license. See COPYING for more information or see http://opensource.org/licenses/MIT.
+Asiacoin is released under the terms of the MIT license. See http://opensource.org/licenses/MIT.
 
 Asiacoin is based on Bitcoin. Its development tracks Bitcoin's, the following information applies to Bitcoin's development.
 
