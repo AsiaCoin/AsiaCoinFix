@@ -1238,10 +1238,19 @@ void ThreadDNSAddressSeed2(void* parg)
     printf("%d addresses found from DNS seeds\n", found);
 }
 
+#define CONVERT_IP4(d, c, b, a) \
+((unsigned int)((a) * 16777216u) + (unsigned int)((b) * 65536u) + (unsigned int)((c) * 256u) + (unsigned int)(d))
 
 unsigned int pnSeed[] =
 {
-		0xD0E0AA6B, 0xE98CF8A2, 0x094E0CC6, 0x0B1EF5AC, 0x328603C0, 0x21F1FCA2
+
+ CONVERT_IP4(92, 222, 19, 210), 
+ CONVERT_IP4(176, 37, 23, 74), 
+ CONVERT_IP4(180, 229, 32, 149), 
+ CONVERT_IP4(188, 165, 42, 51), 
+ CONVERT_IP4(188, 165, 82, 245), 
+ CONVERT_IP4(65, 50, 46, 209), 
+ CONVERT_IP4(76, 106, 165, 183)
 };
 
 const char* pchTorSeed[] =

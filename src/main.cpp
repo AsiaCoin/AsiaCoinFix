@@ -3268,7 +3268,8 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
                         // download node to accept as orphan (proof-of-stake 
                         // block might be rejected by stake connection check)
                         std::vector<CInv> vInv;
-                        vInv.push_back(CInv(MSG_BLOCK, GetLastBlockIndex(pindexBest, false)->GetBlockHash()));
+                        //vInv.push_back(CInv(MSG_BLOCK, GetLastBlockIndex(pindexBest, false)->GetBlockHash()));
+                        vInv.push_back(CInv(MSG_BLOCK, hashBestChain));
                         pfrom->PushMessage("inv", vInv);
                         pfrom->hashContinue = 0;
                     }
