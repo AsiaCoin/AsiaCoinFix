@@ -3474,6 +3474,10 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
 
         if (ProcessBlock(pfrom, &block))
             mapAlreadyAskedFor.erase(inv);
+        else
+        {
+            pfrom->PushGetBlocks(pindexBest, uint256(0));      
+        }
         if (block.nDoS) pfrom->Misbehaving(block.nDoS);
     }
 
