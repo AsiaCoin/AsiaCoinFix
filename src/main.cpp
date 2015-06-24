@@ -48,7 +48,23 @@ static CBigNum bnProofOfWorkLimitTestNet(~uint256(0) >> 20);
 static CBigNum bnProofOfStakeLimitTestNet(~uint256(0) >> 20);
 
 unsigned int nStakeMinAge = 60 * 60 * 24 * 14;	// minimum age for coin age: 14d
-unsigned int nStakeMaxAge = 60 * 60 * 24 * 365 * 10;	// stake age of full weight: 10y
+//unsigned int nStakeMaxAge = 60 * 60 * 24 * 365 * 10;	// stake age of full weight: 10y
+unsigned int StakeMaxAge(int nHeight, bool ftestnet)
+{
+    if (ftestnet)
+    {
+        return 60 * 60;
+    }
+
+    if(nHeight < Hard_Fork_Height)
+    {
+        return 60 * 60 * 24 * 365 * 10;
+    }
+    else
+    {
+        return 60 * 60 * 24 * 90;
+    }
+}
 unsigned int nStakeTargetSpacing = 60;			// 60 sec block spacing
 
 int64 nChainStartTime = 1397664000; //Wed, 16 Apr 2014 16:00:00 GMT
@@ -1414,7 +1430,7 @@ bool CTransaction::ConnectInputs(CTxDB& txdb, MapPrevTx inputs,
         {
             // ppcoin: coin stake tx earns reward instead of paying fee
             uint64 nCoinAge;
-            if (!GetCoinAge(txdb, nCoinAge))
+            if (!GetCoinAge(txdb, nCoinAge, true, pindexBlock->nHeight))
                 return error("ConnectInputs() : %s unable to get coin age for coinstake", GetHash().ToString().substr(0,10).c_str());
             int64 nStakeReward = GetValueOut() - nValueIn;
             if (nStakeReward > GetProofOfStakeReward(nCoinAge, pindexBlock->nBits, nTime, pindexBlock->nHeight) - GetMinFee() + MIN_TX_FEE)
@@ -1898,7 +1914,7 @@ bool CBlock::SetBestChain(CTxDB& txdb, CBlockIndex* pindexNew)
 // guaranteed to be in main chain by sync-checkpoint. This rule is
 // introduced to help nodes establish a consistent view of the coin
 // age (trust score) of competing branches.
-bool CTransaction::GetCoinAge(CTxDB& txdb, uint64& nCoinAge) const
+bool CTransaction::GetCoinAge(CTxDB& txdb, uint64& nCoinAge, bool fReward, int nHeight) const
 {
     CBigNum bnCentSecond = 0;  // coin age in the unit of cent-seconds
     nCoinAge = 0;
@@ -1924,7 +1940,10 @@ bool CTransaction::GetCoinAge(CTxDB& txdb, uint64& nCoinAge) const
             continue; // only count coins meeting min age requirement
 
         int64 nValueIn = txPrev.vout[txin.prevout.n].nValue;
-        bnCentSecond += CBigNum(nValueIn) * (nTime-txPrev.nTime) / CENT;
+        if (fReward && !fTestNet && (nHeight >= Hard_Fork_Height))
+            bnCentSecond += CBigNum(nValueIn) * min((nTime-txPrev.nTime),StakeMaxAge(nHeight, fTestNet)) / CENT;
+        else
+            bnCentSecond += CBigNum(nValueIn) * (nTime-txPrev.nTime) / CENT;
 
         if (fDebug && GetBoolArg("-printcoinage"))
             printf("coin age nValueIn=%"PRI64d" nTimeDiff=%d bnCentSecond=%s\n", nValueIn, nTime - txPrev.nTime, bnCentSecond.ToString().c_str());
@@ -2605,7 +2624,7 @@ bool LoadBlockIndex(bool fAllowNew)
         bnProofOfStakeLimit = bnProofOfStakeLimitTestNet; // 0x00000fff PoS base target is fixed in testnet
         bnProofOfWorkLimit = bnProofOfWorkLimitTestNet; // 0x0000ffff PoW base target is fixed in testnet
         nStakeMinAge = 20 * 60; // test net min age is 20 min
-        nStakeMaxAge = 60 * 60; // test net min age is 60 min
+//        nStakeMaxAge = 60 * 60; // test net min age is 60 min
 		nModifierInterval = 60; // test modifier interval is 2 minutes
         nCoinbaseMaturity = 10; // test maturity is 10 blocks
         nStakeTargetSpacing = 1 * 60; // test block spacing is 3 minutes
@@ -2998,6 +3017,16 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
         {
             pfrom->addrLocal = addrMe;
             SeenLocal(addrMe);
+        }
+
+        if (nBestHeight >= Hard_Fork_Height)
+        {
+            if (pfrom->nVersion < 60008)
+            {
+                printf("partner %s using a old client %d, disconnecting\n", pfrom->addr.ToString().c_str(), pfrom->nVersion);
+                pfrom->fDisconnect = true;
+                return true;
+            }
         }
 
         // Version number wasn't increased for some reason, so we ban the old clients this way.
