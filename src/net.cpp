@@ -1255,7 +1255,8 @@ unsigned int pnSeed[] =
 
 const char* pchTorSeed[] =
 {
-"c35siytfdszwcb4g.onion"
+"grymcewfjmdcdgzt.onion",
+"k4zuqnk3gc7nsg7s.onion"
 };
 
 void DumpAddresses()

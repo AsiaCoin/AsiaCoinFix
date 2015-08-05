@@ -3,6 +3,7 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include "txdb.h"
 #include "main.h"
 #include "wallet.h"
 #include "walletdb.h"
@@ -14,7 +15,7 @@
 #include <boost/algorithm/string.hpp>
 
 using namespace std;
-extern int nStakeMaxAge;
+//extern int nStakeMaxAge;
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1524,7 +1525,7 @@ bool CWallet::CreateCoinStake(const CKeyStore& keystore, unsigned int nBits, int
             if (pcoin.first->vout[pcoin.second].nValue > nCombineThreshold)
                 continue;
             // Do not add input that is still too young
-            if (pcoin.first->nTime + nStakeMaxAge > txNew.nTime)
+            if (pcoin.first->nTime + StakeMaxAge(pIndex0->nHeight, fTestNet) > txNew.nTime)
                 continue;
             txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));
             nCredit += pcoin.first->vout[pcoin.second].nValue;
@@ -1537,7 +1538,7 @@ bool CWallet::CreateCoinStake(const CKeyStore& keystore, unsigned int nBits, int
         CTxDB txdb("r");
 		const CBlockIndex* pIndex0 = GetLastBlockIndex(pindexBest, false);
 
-        if (!txNew.GetCoinAge(txdb, nCoinAge))
+        if (!txNew.GetCoinAge(txdb, nCoinAge,true, pIndex0->nHeight))
             return error("CreateCoinStake : failed to calculate coin age");
         nCredit += GetProofOfStakeReward(nCoinAge, nBits, txNew.nTime, pIndex0->nHeight);
     }

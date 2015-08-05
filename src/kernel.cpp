@@ -5,11 +5,12 @@
 #include <boost/assign/list_of.hpp>
 
 #include "kernel.h"
-#include "db.h"
+#include "txdb.h"
+#include "main.h"
 
 using namespace std;
 
-extern int nStakeMaxAge;
+//extern int nStakeMaxAge;
 extern int nStakeTargetSpacing;
 
 // Modifier interval: time to elapse before new modifier is computed
@@ -284,7 +285,7 @@ bool CheckStakeKernelHash(unsigned int nBits, const CBlock& blockFrom, unsigned 
     // v0.3 protocol kernel hash weight starts from 0 at the min age
     // this change increases active coins participating the hash and helps
     // to secure the network when proof-of-stake difficulty is low
-    int64 nTimeWeight = min((int64)nTimeTx - txPrev.nTime, (int64)nStakeMaxAge) - nStakeMinAge;
+    int64 nTimeWeight = min((int64)nTimeTx - txPrev.nTime, (int64)(StakeMaxAge(mapBlockIndex[blockFrom.GetHash()]->nHeight, fTestNet))) - nStakeMinAge;
     CBigNum bnCoinDayWeight = CBigNum(nValueIn) * nTimeWeight / COIN / (24 * 60 * 60);
 
 	// printf(">>> CheckStakeKernelHash: nTimeWeight = %"PRI64d"\n", nTimeWeight);
@@ -359,7 +360,6 @@ bool CheckProofOfStake(const CTransaction& tx, unsigned int nBits, uint256& hash
     CTxIndex txindex;
     if (!txPrev.ReadFromDisk(txdb, txin.prevout, txindex))
         return tx.DoS(1, error("CheckProofOfStake() : INFO: read txPrev failed"));  // previous transaction not in main chain, may occur during initial download
-    txdb.Close();
 
     // Verify signature
     if (!VerifySignature(txPrev, tx, 0, true, 0))

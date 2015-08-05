@@ -6,6 +6,7 @@
 #include "alert.h"
 #include "checkpoints.h"
 #include "db.h"
+#include "txdb.h"
 #include "net.h"
 #include "init.h" 
 #include "ui_interface.h"
@@ -48,15 +49,31 @@ static CBigNum bnProofOfWorkLimitTestNet(~uint256(0) >> 20);
 static CBigNum bnProofOfStakeLimitTestNet(~uint256(0) >> 20);
 
 unsigned int nStakeMinAge = 60 * 60 * 24 * 14;	// minimum age for coin age: 14d
-unsigned int nStakeMaxAge = 60 * 60 * 24 * 365 * 10;	// stake age of full weight: 10y
+//unsigned int nStakeMaxAge = 60 * 60 * 24 * 365 * 10;	// stake age of full weight: 10y
+unsigned int StakeMaxAge(int nHeight, bool ftestnet)
+{
+    if (ftestnet)
+    {
+        return 60 * 60;
+    }
+
+    if(nHeight < Hard_Fork_Height)
+    {
+        return 60 * 60 * 24 * 365 * 10;
+    }
+    else
+    {
+        return 60 * 60 * 24 * 75;
+    }
+}
 unsigned int nStakeTargetSpacing = 60;			// 60 sec block spacing
 
 int64 nChainStartTime = 1397664000; //Wed, 16 Apr 2014 16:00:00 GMT
 int nCoinbaseMaturity = 50;
 CBlockIndex* pindexGenesisBlock = NULL;
 int nBestHeight = -1;
-CBigNum bnBestChainTrust = 0;
-CBigNum bnBestInvalidTrust = 0;
+uint256 nBestChainTrust = 0;
+uint256 nBestInvalidTrust = 0;
 uint256 hashBestChain = 0;
 CBlockIndex* pindexBest = NULL;
 int64 nTimeBestReceived = 0;
@@ -82,6 +99,9 @@ int64 nHPSTimerStart;
 // Settings
 int64 nTransactionFee = MIN_TX_FEE;
 
+
+// Used during database migration.
+bool fDisableSignatureChecking = false;
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -898,6 +918,7 @@ bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock)
 }
 
 
+
 //////////////////////////////////////////////////////////////////////////////
 //
 // CBlock and CBlockIndex
@@ -1150,22 +1171,26 @@ bool IsInitialBlockDownload()
 
 void static InvalidChainFound(CBlockIndex* pindexNew)
 {
-    if (pindexNew->bnChainTrust > bnBestInvalidTrust)
+    if (pindexNew->nChainTrust > nBestInvalidTrust)
     {
-        bnBestInvalidTrust = pindexNew->bnChainTrust;
-        CTxDB().WriteBestInvalidTrust(bnBestInvalidTrust);
+        nBestInvalidTrust = pindexNew->nChainTrust;
+        CTxDB().WriteBestInvalidTrust(CBigNum(nBestInvalidTrust));
         uiInterface.NotifyBlocksChanged();
     }
 
-    printf("InvalidChainFound: invalid block=%s  height=%d  trust=%s  date=%s\n",
+    uint256 nBestInvalidBlockTrust = pindexNew->nChainTrust - pindexNew->pprev->nChainTrust;
+    uint256 nBestBlockTrust = pindexBest->nHeight != 0 ? (pindexBest->nChainTrust - pindexBest->pprev->nChainTrust) : pindexBest->nChainTrust;
+
+    printf("InvalidChainFound: invalid block=%s  height=%d  trust=%s  blocktrust=%"PRI64d"  date=%s\n",
       pindexNew->GetBlockHash().ToString().substr(0,20).c_str(), pindexNew->nHeight,
-      pindexNew->bnChainTrust.ToString().c_str(), DateTimeStrFormat("%x %H:%M:%S",
-      pindexNew->GetBlockTime()).c_str());
-    printf("InvalidChainFound:  current best=%s  height=%d  trust=%s  date=%s\n",
-      hashBestChain.ToString().substr(0,20).c_str(), nBestHeight, bnBestChainTrust.ToString().c_str(),
+      CBigNum(pindexNew->nChainTrust).ToString().c_str(), nBestInvalidBlockTrust.Get64(),
+      DateTimeStrFormat("%x %H:%M:%S", pindexNew->GetBlockTime()).c_str());
+    printf("InvalidChainFound:  current best=%s  height=%d  trust=%s  blocktrust=%"PRI64d"  date=%s\n",
+      hashBestChain.ToString().substr(0,20).c_str(), nBestHeight,
+      CBigNum(pindexBest->nChainTrust).ToString().c_str(),
+      nBestBlockTrust.Get64(),
       DateTimeStrFormat("%x %H:%M:%S", pindexBest->GetBlockTime()).c_str());
 }
-
 void CBlock::UpdateTime(const CBlockIndex* pindexPrev)
 {
     nTime = std::max(GetBlockTime(), GetAdjustedTime());
@@ -1414,7 +1439,7 @@ bool CTransaction::ConnectInputs(CTxDB& txdb, MapPrevTx inputs,
         {
             // ppcoin: coin stake tx earns reward instead of paying fee
             uint64 nCoinAge;
-            if (!GetCoinAge(txdb, nCoinAge))
+            if (!GetCoinAge(txdb, nCoinAge, true, pindexBlock->nHeight))
                 return error("ConnectInputs() : %s unable to get coin age for coinstake", GetHash().ToString().substr(0,10).c_str());
             int64 nStakeReward = GetValueOut() - nValueIn;
             if (nStakeReward > GetProofOfStakeReward(nCoinAge, pindexBlock->nBits, nTime, pindexBlock->nHeight) - GetMinFee() + MIN_TX_FEE)
@@ -1804,7 +1829,7 @@ bool CBlock::SetBestChain(CTxDB& txdb, CBlockIndex* pindexNew)
 
         // Reorganize is costly in terms of db load, as it works in a single db transaction.
         // Try to limit how much needs to be done inside
-        while (pindexIntermediate->pprev && pindexIntermediate->pprev->bnChainTrust > pindexBest->bnChainTrust)
+        while (pindexIntermediate->pprev && pindexIntermediate->pprev->nChainTrust > pindexBest->nChainTrust)
         {
             vpindexSecondary.push_back(pindexIntermediate);
             pindexIntermediate = pindexIntermediate->pprev;
@@ -1853,11 +1878,11 @@ bool CBlock::SetBestChain(CTxDB& txdb, CBlockIndex* pindexNew)
     pindexBest = pindexNew;
     pblockindexFBBHLast = NULL;
     nBestHeight = pindexBest->nHeight;
-    bnBestChainTrust = pindexNew->bnChainTrust;
+    nBestChainTrust = pindexNew->nChainTrust;
     nTimeBestReceived = GetTime();
     nTransactionsUpdated++;
     printf("SetBestChain: new best=%s  height=%d  trust=%s  date=%s\n",
-      hashBestChain.ToString().c_str(), nBestHeight, bnBestChainTrust.ToString().c_str(),
+      hashBestChain.ToString().c_str(), nBestHeight, nBestChainTrust.ToString().c_str(),
       DateTimeStrFormat("%x %H:%M:%S", pindexBest->GetBlockTime()).c_str());
 
 	printf("Stake checkpoint: %x\n", pindexBest->nStakeModifierChecksum);
@@ -1898,7 +1923,7 @@ bool CBlock::SetBestChain(CTxDB& txdb, CBlockIndex* pindexNew)
 // guaranteed to be in main chain by sync-checkpoint. This rule is
 // introduced to help nodes establish a consistent view of the coin
 // age (trust score) of competing branches.
-bool CTransaction::GetCoinAge(CTxDB& txdb, uint64& nCoinAge) const
+bool CTransaction::GetCoinAge(CTxDB& txdb, uint64& nCoinAge, bool fReward, int nHeight) const
 {
     CBigNum bnCentSecond = 0;  // coin age in the unit of cent-seconds
     nCoinAge = 0;
@@ -1924,7 +1949,10 @@ bool CTransaction::GetCoinAge(CTxDB& txdb, uint64& nCoinAge) const
             continue; // only count coins meeting min age requirement
 
         int64 nValueIn = txPrev.vout[txin.prevout.n].nValue;
-        bnCentSecond += CBigNum(nValueIn) * (nTime-txPrev.nTime) / CENT;
+        if (fReward && !fTestNet && (nHeight >= Hard_Fork_Height))
+            bnCentSecond += CBigNum(nValueIn) * min((nTime-txPrev.nTime),StakeMaxAge(nHeight, fTestNet)) / CENT;
+        else
+            bnCentSecond += CBigNum(nValueIn) * (nTime-txPrev.nTime) / CENT;
 
         if (fDebug && GetBoolArg("-printcoinage"))
             printf("coin age nValueIn=%"PRI64d" nTimeDiff=%d bnCentSecond=%s\n", nValueIn, nTime - txPrev.nTime, bnCentSecond.ToString().c_str());
@@ -1979,7 +2007,7 @@ bool CBlock::AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos)
     }
 
     // ppcoin: compute chain trust score
-    pindexNew->bnChainTrust = (pindexNew->pprev ? pindexNew->pprev->bnChainTrust : 0) + pindexNew->GetBlockTrust();
+    pindexNew->nChainTrust = (pindexNew->pprev ? pindexNew->pprev->nChainTrust : 0) + pindexNew->GetBlockTrust();
 
     // ppcoin: compute stake entropy bit for stake modifier
     if (!pindexNew->SetStakeEntropyBit(GetStakeEntropyBit(pindexNew->nHeight)))
@@ -2018,11 +2046,9 @@ bool CBlock::AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos)
         return false;
 
     // New best
-    if (pindexNew->bnChainTrust > bnBestChainTrust)
+    if (pindexNew->nChainTrust > nBestChainTrust)
         if (!SetBestChain(txdb, pindexNew))
             return false;
-
-    txdb.Close();
 
     if (pindexNew == pindexBest)
     {
@@ -2226,7 +2252,7 @@ bool CBlock::AcceptBlock()
 }
 
 
-CBigNum CBlockIndex::GetBlockTrust() const
+uint256 CBlockIndex::GetBlockTrust() const
 {
     CBigNum bnTarget;
     bnTarget.SetCompact(nBits);
@@ -2236,13 +2262,13 @@ CBigNum CBlockIndex::GetBlockTrust() const
     if (IsProofOfStake())
     {
         // Return trust score as usual
-        return (CBigNum(1)<<256) / (bnTarget+1);
+        return ((CBigNum(1)<<256) / (bnTarget+1)).getuint256();
     }
     else
     {
         // Calculate work amount for block
         CBigNum bnPoWTrust = (bnProofOfWorkLimit / (bnTarget+1));
-        return bnPoWTrust > 1 ? bnPoWTrust : 1;
+        return bnPoWTrust > 1 ? bnPoWTrust.getuint256() : 1;
     }
 } 
 
@@ -2322,17 +2348,17 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock)
     if (!mapBlockIndex.count(pblock->hashPrevBlock))
     {
         printf("ProcessBlock: ORPHAN BLOCK, prev=%s\n", pblock->hashPrevBlock.ToString().substr(0,20).c_str());
-        CBlock* pblock2 = new CBlock(*pblock);
         // ppcoin: check proof-of-stake
-        if (pblock2->IsProofOfStake())
+        if (pblock->IsProofOfStake())
         {
             // Limited duplicity on stake: prevents block flood attack
             // Duplicate stake allowed only when there is orphan child block
-            if (setStakeSeenOrphan.count(pblock2->GetProofOfStake()) && !mapOrphanBlocksByPrev.count(hash) && !Checkpoints::WantedByPendingSyncCheckpoint(hash))
-                return error("ProcessBlock() : duplicate proof-of-stake (%s, %d) for orphan block %s", pblock2->GetProofOfStake().first.ToString().c_str(), pblock2->GetProofOfStake().second, hash.ToString().c_str());
+            if (setStakeSeenOrphan.count(pblock->GetProofOfStake()) && !mapOrphanBlocksByPrev.count(hash) && !Checkpoints::WantedByPendingSyncCheckpoint(hash))
+                return error("ProcessBlock() : duplicate proof-of-stake (%s, %d) for orphan block %s", pblock->GetProofOfStake().first.ToString().c_str(), pblock->GetProofOfStake().second, hash.ToString().c_str());
             else
-                setStakeSeenOrphan.insert(pblock2->GetProofOfStake());
+                setStakeSeenOrphan.insert(pblock->GetProofOfStake());
         }
+        CBlock* pblock2 = new CBlock(*pblock);
         mapOrphanBlocks.insert(std::make_pair(hash, pblock2));
         mapOrphanBlocksByPrev.insert(std::make_pair(pblock2->hashPrevBlock, pblock2));
 
@@ -2605,7 +2631,7 @@ bool LoadBlockIndex(bool fAllowNew)
         bnProofOfStakeLimit = bnProofOfStakeLimitTestNet; // 0x00000fff PoS base target is fixed in testnet
         bnProofOfWorkLimit = bnProofOfWorkLimitTestNet; // 0x0000ffff PoW base target is fixed in testnet
         nStakeMinAge = 20 * 60; // test net min age is 20 min
-        nStakeMaxAge = 60 * 60; // test net min age is 60 min
+//        nStakeMaxAge = 60 * 60; // test net min age is 60 min
 		nModifierInterval = 60; // test modifier interval is 2 minutes
         nCoinbaseMaturity = 10; // test maturity is 10 blocks
         nStakeTargetSpacing = 1 * 60; // test block spacing is 3 minutes
@@ -2614,10 +2640,9 @@ bool LoadBlockIndex(bool fAllowNew)
     //
     // Load block index
     //
-    CTxDB txdb("cr");
+    CTxDB txdb("cr+");
     if (!txdb.LoadBlockIndex())
         return false;
-    txdb.Close();
 
     //
     // Init with genesis block
@@ -2701,7 +2726,6 @@ bool LoadBlockIndex(bool fAllowNew)
             if ((!fTestNet) && !Checkpoints::ResetSyncCheckpoint())
                 return error("LoadBlockIndex() : failed to reset sync-checkpoint");
         }
-        txdb.Close();
     }
 
     return true;
@@ -2783,7 +2807,7 @@ void PrintBlockTree()
     }
 }
 
-bool LoadExternalBlockFile(FILE* fileIn)
+bool LoadExternalBlockFile(FILE* fileIn, ExternalBlockFileProgress *progress)
 {
     int64 nStart = GetTimeMillis();
 
@@ -2832,6 +2856,8 @@ bool LoadExternalBlockFile(FILE* fileIn)
                         nPos += 4 + nSize;
                     }
                 }
+                if (progress != NULL)
+                    (*progress)(4 + nSize);
             }
         }
         catch (std::exception &e) {
@@ -2998,6 +3024,16 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
         {
             pfrom->addrLocal = addrMe;
             SeenLocal(addrMe);
+        }
+
+        if (nBestHeight >= Hard_Fork_Height)
+        {
+            if (pfrom->nVersion < 60008)
+            {
+                printf("partner %s using a old client %d, disconnecting\n", pfrom->addr.ToString().c_str(), pfrom->nVersion);
+                pfrom->fDisconnect = true;
+                return true;
+            }
         }
 
         // Version number wasn't increased for some reason, so we ban the old clients this way.

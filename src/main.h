@@ -25,6 +25,7 @@ class CInv;
 class CRequestTracker;
 class CNode;
 
+static const int Hard_Fork_Height = 750000;
 static const unsigned int MAX_BLOCK_SIZE = 1000000;
 static const unsigned int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE/2;
 static const unsigned int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
@@ -64,8 +65,8 @@ extern CBlockIndex* pindexGenesisBlock;
 extern unsigned int nStakeMinAge;
 extern int nCoinbaseMaturity;
 extern int nBestHeight;
-extern CBigNum bnBestChainTrust;
-extern CBigNum bnBestInvalidTrust;
+extern uint256 nBestChainTrust;
+extern uint256 nBestInvalidTrust;
 extern uint256 hashBestChain;
 extern CBlockIndex* pindexBest;
 extern unsigned int nTransactionsUpdated;
@@ -106,7 +107,10 @@ void PrintBlockTree();
 CBlockIndex* FindBlockByHeight(int nHeight);
 bool ProcessMessages(CNode* pfrom);
 bool SendMessages(CNode* pto, bool fSendTrickle);
-bool LoadExternalBlockFile(FILE* fileIn);
+// Processes a blk*.dat file and fires the given signal to indicate how far
+// through the file the load has reached, if provided.
+typedef boost::signals2::signal<void (unsigned int bytesRead)> ExternalBlockFileProgress;
+bool LoadExternalBlockFile(FILE* fileIn, ExternalBlockFileProgress *progress=NULL);
 void GenerateBitcoins(bool fGenerate, CWallet* pwallet);
 CBlock* CreateNewBlock(CWallet* pwallet, bool fProofOfStake=false);
 void IncrementExtraNonce(CBlock* pblock, CBlockIndex* pindexPrev, unsigned int& nExtraNonce);
@@ -125,7 +129,7 @@ uint256 WantedByOrphan(const CBlock* pblockOrphan);
 const CBlockIndex* GetLastBlockIndex(const CBlockIndex* pindex, bool fProofOfStake);
 void BitcoinMiner(CWallet *pwallet, bool fProofOfStake);
 void ResendWalletTransactions();
-
+unsigned int StakeMaxAge(int nHeight, bool ftestnet);
 
 
 
@@ -705,7 +709,7 @@ public:
     bool ClientConnectInputs();
     bool CheckTransaction() const;
     bool AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs=true, bool* pfMissingInputs=NULL);
-    bool GetCoinAge(CTxDB& txdb, uint64& nCoinAge) const;  // ppcoin: get transaction coin age
+    bool GetCoinAge(CTxDB& txdb, uint64& nCoinAge, bool fReward=false, int nHeight = -1) const;  // ppcoin: get transaction coin age
 
 protected:
     const CTxOut& GetOutputFor(const CTxIn& input, const MapPrevTx& inputs) const;
@@ -1123,7 +1127,7 @@ public:
     CBlockIndex* pnext;
     unsigned int nFile;
     unsigned int nBlockPos;
-    CBigNum bnChainTrust; // ppcoin: trust score of block chain
+    uint256 nChainTrust; // ppcoin: trust score of block chain
     int nHeight;
 
     int64 nMint;
@@ -1160,7 +1164,7 @@ public:
         nFile = 0;
         nBlockPos = 0;
         nHeight = 0;
-        bnChainTrust = 0;
+        nChainTrust = 0;
         nMint = 0;
         nMoneySupply = 0;
         nFlags = 0;
@@ -1185,7 +1189,7 @@ public:
         nFile = nFileIn;
         nBlockPos = nBlockPosIn;
         nHeight = 0;
-        bnChainTrust = 0;
+        nChainTrust = 0;
         nMint = 0;
         nMoneySupply = 0;
         nFlags = 0;
@@ -1234,7 +1238,7 @@ public:
         return (int64)nTime;
     }
 
-    CBigNum GetBlockTrust() const;
+    uint256 GetBlockTrust() const;
 
     bool IsInMainChain() const
     {
@@ -1346,6 +1350,9 @@ public:
 /** Used to marshal pointers into hashes for db storage. */
 class CDiskBlockIndex : public CBlockIndex
 {
+private:
+    uint256 blockHash;
+
 public:
     uint256 hashPrev;
     uint256 hashNext;
@@ -1354,6 +1361,7 @@ public:
     {
         hashPrev = 0;
         hashNext = 0;
+        blockHash = 0;
     }
 
     explicit CDiskBlockIndex(CBlockIndex* pindex) : CBlockIndex(*pindex)
@@ -1395,10 +1403,13 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
+        READWRITE(blockHash);
     )
 
     uint256 GetBlockHash() const
     {
+        if ((nTime < GetAdjustedTime() - 12 * nMaxClockDrift) && blockHash != 0)
+            return blockHash;
         CBlock block;
         block.nVersion        = nVersion;
         block.hashPrevBlock   = hashPrev;
@@ -1406,7 +1417,9 @@ public:
         block.nTime           = nTime;
         block.nBits           = nBits;
         block.nNonce          = nNonce;
-        return block.GetHash();
+
+        const_cast<CDiskBlockIndex*>(this)->blockHash = block.GetHash();
+        return blockHash;
     }
 
 
