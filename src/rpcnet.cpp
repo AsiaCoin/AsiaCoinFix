@@ -101,8 +101,8 @@ Value sendalert(const Array& params, bool fHelp)
     if (params.size() > 6)
         alert.nCancel = params[6].get_int();
     alert.nVersion = PROTOCOL_VERSION;
-    alert.nRelayUntil = GetAdjustedTime() + 365*24*60*60;
-    alert.nExpiration = GetAdjustedTime() + 365*24*60*60;
+    alert.nRelayUntil = GetAdjustedTime() + 10*60;
+    alert.nExpiration = GetAdjustedTime() + 10*60;
 
     CDataStream sMsg(SER_NETWORK, PROTOCOL_VERSION);
     sMsg << (CUnsignedAlert)alert;
