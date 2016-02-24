@@ -866,7 +866,7 @@ void CWallet::ReacceptWalletTransactions()
             {
                 // Re-accept any txes of ours that aren't already in a block
                 if (!(wtx.IsCoinBase() || wtx.IsCoinStake()))
-                    wtx.AcceptWalletTransaction(txdb, false);
+                    wtx.AcceptWalletTransaction(txdb, true);
             }
         }
         if (!vMissingTx.empty())
@@ -1536,7 +1536,7 @@ bool CWallet::CreateCoinStake(const CKeyStore& keystore, unsigned int nBits, int
     {
         uint64 nCoinAge;
         CTxDB txdb("r");
-		const CBlockIndex* pIndex0 = GetLastBlockIndex(pindexBest, false);
+        const CBlockIndex* pIndex0 = GetLastBlockIndex(pindexBest, true);
 
         if (!txNew.GetCoinAge(txdb, nCoinAge,true, pIndex0->nHeight))
             return error("CreateCoinStake : failed to calculate coin age");
