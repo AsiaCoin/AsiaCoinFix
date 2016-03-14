@@ -7,7 +7,7 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 DEFINES += QT_GUI BOOST_THREAD_USE_LIB BOOST_SPIRIT_THREADSAFE BOOST_THREAD_PROVIDES_GENERIC_SHARED_MUTEX_ON_WIN __NO_SYSTEM_INCLUDES
 CONFIG += no_include_pwd
 CONFIG += thread
-CONFIG += static
+#CONFIG += static
 
 # Change paths if needed, these use the foocoin/deps.git repository locations
 
@@ -16,13 +16,13 @@ CONFIG += static
 #    BDB_LIB_PATH, OPENSSL_INCLUDE_PATH and OPENSSL_LIB_PATH respectively
 
 win32 {
-BOOST_LIB_SUFFIX=-mgw49-mt-s-1_58
-BOOST_INCLUDE_PATH=C:/MyProjects/Deps/boost_1_58_0
-BOOST_LIB_PATH=C:/MyProjects/Deps/boost_1_58_0/stage/lib
+BOOST_LIB_SUFFIX=-mgw49-mt-s-1_60
+BOOST_INCLUDE_PATH=C:/MyProjects/Deps/boost_1_60_0
+BOOST_LIB_PATH=C:/MyProjects/Deps/boost_1_60_0/stage/lib
 BDB_INCLUDE_PATH=C:/MyProjects/Deps/db-4.8.30.NC/build_unix
 BDB_LIB_PATH=C:/MyProjects/Deps/db-4.8.30.NC/build_unix
-OPENSSL_INCLUDE_PATH=C:/MyProjects/Deps/openssl-1.0.2d/include
-OPENSSL_LIB_PATH=C:/MyProjects/Deps/openssl-1.0.2d
+OPENSSL_INCLUDE_PATH=C:/MyProjects/Deps/openssl-1.0.2f/include
+OPENSSL_LIB_PATH=C:/MyProjects/Deps/openssl-1.0.2f
 MINIUPNPC_INCLUDE_PATH=C:/MyProjects/Deps
 MINIUPNPC_LIB_PATH=C:/MyProjects/Deps/miniupnpc
 QRENCODE_INCLUDE_PATH=C:/MyProjects/Deps/qrencode-3.4.4
@@ -52,7 +52,7 @@ QMAKE_LFLAGS *= -fstack-protector-all --param ssp-buffer-size=1
 # This can be enabled for Windows, when we switch to MinGW >= 4.4.x.
 }
 # for extra security on Windows: enable ASLR and DEP via GCC linker flags
-win32:QMAKE_LFLAGS *= -Wl,--dynamicbase -Wl,--nxcompat -static
+win32:QMAKE_LFLAGS *= -Wl,--dynamicbase -Wl,--nxcompat
 
 # use: qmake "USE_QRCODE=1"
 # libqrencode (http://fukuchi.org/works/qrencode/index.en.html) must be installed for support
@@ -115,11 +115,11 @@ SOURCES += src/txdb-leveldb.cpp
         isEmpty(QMAKE_RANLIB) {
             QMAKE_RANLIB = $$replace(QMAKE_STRIP, strip, ranlib)
         }
-       # genleveldb.commands = cd $$PWD/src/leveldb ; CC=$$QMAKE_CC CXX=$$QMAKE_CXX TARGET_OS=OS_WINDOWS_CROSSCOMPILE CXXFLAGS="-I$$BOOST_INCLUDE_PATH" LDFLAGS="-L$$BOOST_LIB_PATH" make libleveldb.a libmemenv.a ; $$QMAKE_RANLIB $$PWD/src/leveldb/libleveldb.a
+       genleveldb.commands = cd $$PWD/src/leveldb ; CC=$$QMAKE_CC CXX=$$QMAKE_CXX TARGET_OS=OS_WINDOWS_CROSSCOMPILE CXXFLAGS="-I$$BOOST_INCLUDE_PATH" LDFLAGS="-L$$BOOST_LIB_PATH" mingw32-make libleveldb.a libmemenv.a ; $$QMAKE_RANLIB $$PWD/src/leveldb/libleveldb.a
 }
 genleveldb.target = $$PWD/src/leveldb/libleveldb.a
 genleveldb.depends = FORCE
-PRE_TARGETDEPS += $$PWD/src/leveldb/libleveldb.a
+PRE_TARGETDEPS += $$PWD/src/leveldb/libleveldb.a                                                                                                                                   
 QMAKE_EXTRA_TARGETS += genleveldb
 # Gross ugly hack that depends on qmake internals, unfortunately there's no other way to do it.
 QMAKE_CLEAN += $$PWD/src/leveldb/libleveldb.a; cd $$PWD/src/leveldb ; make clean
@@ -135,8 +135,10 @@ QMAKE_CLEAN += $$PWD/src/leveldb/libleveldb.a; cd $$PWD/src/leveldb ; make clean
     DEFINES += HAVE_BUILD_INFO
 }
 
-QMAKE_CXXFLAGS += -msse2
-QMAKE_CFLAGS += -msse2
+!contains(ARM,1){
+    QMAKE_CXXFLAGS += -msse2
+    QMAKE_CFLAGS += -msse2
+}
 QMAKE_CXXFLAGS_WARN_ON = -fdiagnostics-show-option -Wall -Wextra -Wformat -Wformat-security -Wno-unused-parameter -Wstack-protector
 
 # Input

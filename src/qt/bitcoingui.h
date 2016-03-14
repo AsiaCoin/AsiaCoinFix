@@ -96,6 +96,7 @@ private:
     QAction *unlockWalletMiningAction;
     QAction *aboutQtAction;
     QAction *openRPCConsoleAction;
+    QAction *showBackupsAction;
 
     QSystemTrayIcon *trayIcon;
     Notificator *notificator;
