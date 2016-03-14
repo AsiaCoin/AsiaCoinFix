@@ -437,3 +437,8 @@ void RPCConsole::on_showCLOptionsButton_clicked()
     GUIUtil::HelpMessageBox help;
     help.exec();
 }
+
+void RPCConsole::showBackups()
+{
+    GUIUtil::showBackups();
+}
